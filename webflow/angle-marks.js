@@ -1,5 +1,5 @@
 /* Angle Marks — Webflow adapter, adapted from the supplied angle-marks.js.
- * No dependencies. Auto-mounts #angle-mark after DOM ready.
+ * No dependencies. Auto-mounts #angle-mark and [data-angle-marks] after DOM ready.
  * Optional attributes: data-angle-scale="2", data-angle-count="8".
  * Container must have a height/min-height. Mobile (<=767px) uses half size.
  */
@@ -141,15 +141,16 @@ function mount(target,input={}){
 }
 global.AngleMarks={mount,markup,styles:drawStyles};
 function autoMount(){
- const host=document.getElementById('angle-mark');
- if(!host||instances.has(host))return;
- const options={};
- if(host.dataset.angleScale)options.scale=host.dataset.angleScale;
- if(host.dataset.angleCount)options.count=host.dataset.angleCount;
- if(host.dataset.angleWidth)options.width=host.dataset.angleWidth;
- if(host.dataset.angleLength)options.length=host.dataset.angleLength;
- if(host.dataset.angleInteractive==='false')options.interactive=false;
- mount(host,options);
+ document.querySelectorAll('#angle-mark, [data-angle-marks]').forEach(host=>{
+  if(instances.has(host))return;
+  const options={};
+  if(host.dataset.angleScale)options.scale=host.dataset.angleScale;
+  if(host.dataset.angleCount)options.count=host.dataset.angleCount;
+  if(host.dataset.angleWidth)options.width=host.dataset.angleWidth;
+  if(host.dataset.angleLength)options.length=host.dataset.angleLength;
+  if(host.dataset.angleInteractive==='false')options.interactive=false;
+  mount(host,options);
+ });
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',autoMount,{once:true});
 else autoMount();
