@@ -66,7 +66,7 @@ function tonalPair(mode,enabled,rng,background){
  return [base,accents[Math.floor(rng()*accents.length)]||base];
 }
 
-const defaults={count:8,width:80,length:181.424,min:0,max:45,negative:true,segments:'mixed',silhouette:'mixed',mode:'tonal',colors,seed:null,interactive:true,scale:1,mobileScale:.5,mobile:false,avoidBackground:true,backgroundColor:null};
+const defaults={count:8,width:80,length:320.972,min:0,max:45,negative:true,segments:'mixed',silhouette:'mixed',mode:'tonal',colors,seed:null,interactive:true,scale:1,mobileScale:.5,mobile:false,avoidBackground:true,backgroundColor:null};
 // Explicit visual types: mirrored/rotated versions still count as the same silhouette.
 const silhouettes=Object.freeze({
  single:Object.freeze({family:'fan',segments:1}),
@@ -100,7 +100,7 @@ function number(v,fallback,lo,hi){v=Number(v);return Number.isFinite(v)?Math.max
 function normalize(input){
  const o={...defaults,...input};
  o.scale=number(o.scale,1,.1,2);o.mobileScale=number(o.mobileScale,.5,.1,1);
- o.count=Math.round(number(o.count,8,1,100));o.width=number(o.width,80,1,200);o.length=number(o.length,181.424,1,1000);
+ o.count=Math.round(number(o.count,8,1,100));o.width=number(o.width,80,1,200);o.length=number(o.length,320.972,1,1000);
  o.min=number(o.min,0,-90,90);o.max=number(o.max,45,o.min,90);
  o.segments=['1','2','3'].includes(String(o.segments))?Number(o.segments):'mixed';
  o.silhouette=['mixed','fan',...silhouetteTypes].includes(o.silhouette)?o.silhouette:'mixed';
@@ -132,7 +132,8 @@ function markup(W,H,input){
   const type=o.assignedSilhouettes?.[i]||chooseSilhouette(o,rng);
   const shape=silhouettes[type],crossed=shape.family==='crossed-dash',n=shape.segments;
   const flip=rng()>.5?-1:1,angles=fanAngles(n,o.min,o.max,o.negative,rng),center=(angles[0]+angles[n-1])/2;
-  const length=len*(.9+rng()*.1);
+  rng(); // Preserve the seeded color/orientation sequence; lengths no longer vary.
+  const length=len;
   const ends=angles.map(a=>[Math.cos(a*Math.PI/180)*length*flip,Math.sin(a*Math.PI/180)*length]);
   const envelope=length+width/2+dragLimit+edge;
   const slackX=Math.max(0,cw-2*envelope),slackY=Math.max(0,ch-2*envelope);
@@ -143,13 +144,21 @@ function markup(W,H,input){
    // A bent, same-color base with an independent contrasting dash over it.
    // All endpoints stay within the reserved circular motion envelope.
    const tilt=(center*.35)*Math.PI/180,c=Math.cos(tilt),s=Math.sin(tilt);
-   const point=(px,py)=>[x+(px*c-py*s)*length*flip,y+(px*s+py*c)*length];
+   const point=(px,py)=>[x+(px*c-py*s)*flip,y+(px*s+py*c)];
    const base=pair?pair[0]:o.colors[Math.floor(rng()*o.colors.length)];
    const accents=o.colors.filter(color=>color!==base);
    const accent=pair?pair[1]:(accents.length?accents[Math.floor(rng()*accents.length)]:base);
    const segments=[[-.8,.5,.1,-.5],[-.8,.5,.85,.15],[-.65,-.65,.65,.55]];
+   const reference=Math.hypot(1.3,1.2);
    segments.forEach((coords,j)=>{
-    const a=point(coords[0],coords[1]),b=point(coords[2],coords[3]);
+    const dx=coords[2]-coords[0],dy=coords[3]-coords[1],distance=Math.hypot(dx,dy);
+    let ax=coords[0]*length/reference,ay=coords[1]*length/reference;
+    // Base strokes retain their shared joint; the crossing dash retains its midpoint.
+    if(j===2){
+     ax=(coords[0]+coords[2])*length/(2*reference)-dx/distance*length/2;
+     ay=(coords[1]+coords[3])*length/(2*reference)-dy/distance*length/2;
+    }
+    const a=point(ax,ay),b=point(ax+dx/distance*length,ay+dy/distance*length);
     result+=`<line data-am-part="${j===2?'dash':'base'}" x1="${a[0].toFixed(3)}" y1="${a[1].toFixed(3)}" x2="${b[0].toFixed(3)}" y2="${b[1].toFixed(3)}" stroke="${j===2?accent:base}" stroke-width="${width.toFixed(3)}" stroke-linecap="round" pathLength="1" class="am-draw-stroke" style="--draw-delay:${i*65+j*100}ms"/>`;
    });
   }else for(let j=0;j<n;j++){
