@@ -1,7 +1,7 @@
 /* Angle Marks — Webflow adapter, adapted from the supplied angle-marks.js.
  * No dependencies. Auto-mounts #angle-mark and [data-angle-marks] after DOM ready.
  * Optional attributes: data-angle-scale="2", data-angle-count="8".
- * Container must have a height/min-height. Below desktop (<=991px) uses half size.
+ * Below desktop (<=991px) uses half size. Header silhouettes are chosen without repeats.
  */
 (function(global){
 'use strict';
@@ -67,7 +67,35 @@ function tonalPair(mode,enabled,rng,background){
 }
 
 const defaults={count:8,width:80,length:170,min:0,max:45,negative:true,segments:'mixed',silhouette:'mixed',mode:'tonal',colors,seed:null,interactive:true,scale:1,mobileScale:.5,mobile:false,avoidBackground:true,backgroundColor:null};
-const instances=new WeakMap();
+// Explicit visual types: mirrored/rotated versions still count as the same silhouette.
+const silhouettes=Object.freeze({
+ single:Object.freeze({family:'fan',segments:1}),
+ double:Object.freeze({family:'fan',segments:2}),
+ triple:Object.freeze({family:'fan',segments:3}),
+ 'crossed-dash':Object.freeze({family:'crossed-dash',segments:3})
+});
+const silhouetteTypes=Object.keys(silhouettes);
+const instances=new WeakMap(),headerGroups=new WeakMap();
+function silhouettePool(o){
+ if(silhouetteTypes.includes(o.silhouette))return [o.silhouette];
+ if(o.segments!=='mixed')return [silhouetteTypes[o.segments-1]];
+ return o.silhouette==='fan'?silhouetteTypes.slice(0,3):silhouetteTypes;
+}
+function chooseSilhouette(o,rng,used=[]){
+ const preferred=silhouettePool(o);
+ let pool=preferred.filter(type=>!used.includes(type));
+ // Header uniqueness takes priority if two containers request the same type.
+ if(!pool.length)pool=silhouetteTypes.filter(type=>!used.includes(type));
+ // More than four marks exhaust the catalog; start a fresh selection cycle.
+ if(!pool.length)pool=preferred;
+ return pool[Math.floor(rng()*pool.length)];
+}
+function headerGroup(host){
+ if(!host.matches('#angle-mark-header-shapes, #angle-mark-header-block, .header-shapes, .header-block'))return null;
+ const scope=host.closest('header, section, .section')||document;
+ if(!headerGroups.has(scope))headerGroups.set(scope,new Map());
+ return headerGroups.get(scope);
+}
 function number(v,fallback,lo,hi){v=Number(v);return Number.isFinite(v)?Math.max(lo,Math.min(hi,v)):fallback}
 function normalize(input){
  const o={...defaults,...input};
@@ -75,7 +103,7 @@ function normalize(input){
  o.count=Math.round(number(o.count,8,1,100));o.width=number(o.width,80,1,200);o.length=number(o.length,170,1,1000);
  o.min=number(o.min,0,-90,90);o.max=number(o.max,45,o.min,90);
  o.segments=['1','2','3'].includes(String(o.segments))?Number(o.segments):'mixed';
- o.silhouette=['mixed','fan','crossed-dash'].includes(o.silhouette)?o.silhouette:'mixed';
+ o.silhouette=['mixed','fan',...silhouetteTypes].includes(o.silhouette)?o.silhouette:'mixed';
  o.mode=['free','tonal','white','near'].includes(o.mode)?o.mode:'tonal';
  o.colors=Array.isArray(o.colors)?o.colors.map(c=>String(c).toUpperCase()).filter(c=>colors.includes(c)):colors;
  if(!o.colors.length)o.colors=[...colors];
@@ -100,8 +128,8 @@ function markup(W,H,input){
  const edge=8,dragLimit=16;
  let result='';
  for(let i=0;i<o.count;i++){
-  const crossed=o.silhouette==='crossed-dash'||(o.silhouette==='mixed'&&o.segments==='mixed'&&rng()<.25);
-  const n=o.segments==='mixed'?1+Math.floor(rng()*3):o.segments;
+  const type=o.assignedSilhouettes?.[i]||chooseSilhouette(o,rng);
+  const shape=silhouettes[type],crossed=shape.family==='crossed-dash',n=shape.segments;
   const flip=rng()>.5?-1:1,angles=fanAngles(n,o.min,o.max,o.negative,rng),center=(angles[0]+angles[n-1])/2;
   const length=len*(.9+rng()*.1);
   const ends=angles.map(a=>[Math.cos(a*Math.PI/180)*length*flip,Math.sin(a*Math.PI/180)*length]);
@@ -109,7 +137,7 @@ function markup(W,H,input){
   const slackX=Math.max(0,cw-2*envelope),slackY=Math.max(0,ch-2*envelope);
   const x=(i%cols)*cw+envelope+slackX*rng(),y=Math.floor(i/cols)*ch+envelope+slackY*rng();
   const pair=o.mode==='free'?null:tonalPair(o.mode,o.colors,seeded(o.seed+i*7919),o.avoidBackground?o.backgroundColor:null);let previous='';
-  result+=`<g data-am-mark="${i}" data-am-silhouette="${crossed?'crossed-dash':'fan'}" data-x="${x.toFixed(3)}" data-y="${y.toFixed(3)}" style="pointer-events:var(--am-pointer,visiblePainted);cursor:var(--am-cursor,grab)">`;
+  result+=`<g data-am-mark="${i}" data-am-silhouette="${type}" data-x="${x.toFixed(3)}" data-y="${y.toFixed(3)}" style="pointer-events:var(--am-pointer,visiblePainted);cursor:var(--am-cursor,grab)">`;
   if(crossed){
    // A bent, same-color base with an independent contrasting dash over it.
    // All endpoints stay within the reserved circular motion envelope.
@@ -136,7 +164,17 @@ function mount(target,input={}){
  const host=typeof target==='string'?document.querySelector(target):target;
  if(!host)return null;
  if(instances.has(host)){const api=instances.get(host);api.update(input);return api}
+ const group=headerGroup(host);
+ let assignedSilhouettes=null;
+ function assignSilhouettes(){
+  if(!group)return;
+  const used=[...group.entries()].filter(([other])=>other!==host&&other.isConnected).flatMap(([,types])=>types);
+  const rng=seeded(options.seed);
+  assignedSilhouettes=Array.from({length:options.count},()=>{const type=chooseSilhouette(options,rng,used);used.push(type);return type});
+  group.set(host,assignedSilhouettes);
+ }
  let options=normalize(input),destroyed=false,painted=false,lastWidth=0,lastHeight=0,resizeFrame=0,backgroundFrame=0,lastBackground=null;
+ assignSilhouettes();
  const oldPosition=host.style.position;
  if(getComputedStyle(host).position==='static')host.style.position='relative';
  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
@@ -165,7 +203,7 @@ function mount(target,input={}){
   svg.setAttribute('viewBox',`0 0 ${board.width} ${board.height}`);
   lastBackground=options.backgroundColor||backdrop(host);
   svg.setAttribute("data-am-background",lastBackground);
-  svg.innerHTML=(animate||!painted?`<style>${drawStyles}</style>`:'')+markup(w,h,{...options,mobile:mobile.matches,backgroundColor:lastBackground});
+  svg.innerHTML=(animate||!painted?`<style>${drawStyles}</style>`:'')+markup(w,h,{...options,assignedSilhouettes,mobile:mobile.matches,backgroundColor:lastBackground});
   svg.style.pointerEvents='none';svg.style.setProperty('--am-pointer',options.interactive?'visiblePainted':'none');svg.style.touchAction='pan-y';painted=true;
  }
  function point(e){const m=svg.getScreenCTM();return new DOMPoint(e.clientX,e.clientY).matrixTransform(m.inverse())}
@@ -207,10 +245,10 @@ function mount(target,input={}){
  const onViewportResize=()=>{cancelAnimationFrame(resizeFrame);resizeFrame=requestAnimationFrame(()=>draw(false))};global.addEventListener("resize",onViewportResize,{passive:true});
  const observer=new ResizeObserver(()=>{cancelAnimationFrame(resizeFrame);resizeFrame=requestAnimationFrame(()=>{if(lastWidth!==host.clientWidth||lastHeight!==host.clientHeight)draw(false)})});
  observer.observe(host);
- const api={regenerate(){options.seed=randomSeed();draw(true)},update(next){options=normalize({...options,...next});draw(false)},destroy(){destroyed=true;observer.disconnect();backgroundObserver.disconnect();cancelAnimationFrame(backgroundFrame);ancestors.forEach(el=>el.removeEventListener('transitionend',refreshBackground));cancelAnimationFrame(resizeFrame);reset();global.removeEventListener('blur',blur);global.removeEventListener('resize',onViewportResize);mobile.removeEventListener('change',onMobileChange);svg.remove();if(host.style.position==='relative')host.style.position=oldPosition;instances.delete(host)}};
+ const api={regenerate(){options.seed=randomSeed();assignSilhouettes();draw(true)},update(next){options=normalize({...options,...next});if(['seed','count','silhouette','segments'].some(key=>Object.prototype.hasOwnProperty.call(next,key)))assignSilhouettes();draw(false)},destroy(){destroyed=true;if(group)group.delete(host);observer.disconnect();backgroundObserver.disconnect();cancelAnimationFrame(backgroundFrame);ancestors.forEach(el=>el.removeEventListener('transitionend',refreshBackground));cancelAnimationFrame(resizeFrame);reset();global.removeEventListener('blur',blur);global.removeEventListener('resize',onViewportResize);mobile.removeEventListener('change',onMobileChange);svg.remove();if(host.style.position==='relative')host.style.position=oldPosition;instances.delete(host)}};
  instances.set(host,api);draw(true);return api;
 }
-global.AngleMarks={mount,markup,layout,styles:drawStyles};
+global.AngleMarks={mount,markup,layout,silhouettes,styles:drawStyles};
 function autoMount(){
  document.querySelectorAll('#angle-mark, [data-angle-marks]').forEach(host=>{
   if(instances.has(host))return;
