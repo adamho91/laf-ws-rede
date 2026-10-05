@@ -184,7 +184,7 @@ function mount(target,input={}){
  let drag=null,frame=0,lines=[];
  const mobile=global.matchMedia('(max-width: 991px)');
  const reduced=global.matchMedia('(prefers-reduced-motion: reduce)');
- function reset(){drag=null;cancelAnimationFrame(frame);frame=0;lines.forEach(l=>l.el.removeAttribute('transform'));lines=[];svg.style.setProperty('--am-cursor','grab')}
+ function reset(){const pointerId=drag?.id;drag=null;if(pointerId!=null&&svg.hasPointerCapture(pointerId))svg.releasePointerCapture(pointerId);cancelAnimationFrame(frame);frame=0;lines.forEach(l=>l.el.removeAttribute('transform'));lines=[];svg.style.setProperty('--am-cursor','grab')}
  function draw(animate=false){
   if(destroyed)return;
   const w=host.clientWidth,h=host.clientHeight;
@@ -210,10 +210,13 @@ function mount(target,input={}){
  function tick(){
   let unsettled=false;
   for(const l of lines){
-   const tx=drag?drag.dx*l.weight:0,ty=drag?drag.dy*l.weight:0,ta=drag?(drag.dx-drag.dy)*l.twist:0,ease=reduced.matches?1:drag?.18:.12;
-   l.x+=(tx-l.x)*ease;l.y+=(ty-l.y)*ease;l.a+=(ta-l.a)*ease;
-   if(Math.abs(tx-l.x)+Math.abs(ty-l.y)+Math.abs(ta-l.a)>.02)unsettled=true;
-   l.el.setAttribute('transform',`translate(${l.x} ${l.y}) rotate(${l.a} ${l.cx} ${l.cy})`);
+   // Drag perpendicular to each stroke to open/close its angle independently.
+   // Rotate about the mark's original pivot; never translate or exceed +/-7deg.
+   const ta=drag?Math.max(-7,Math.min(7,(drag.dx*l.nx+drag.dy*l.ny)*7/120)):0;
+   const ease=reduced.matches?1:drag?.18:.12;
+   l.a+=(ta-l.a)*ease;
+   if(Math.abs(ta-l.a)>.02)unsettled=true;
+   l.el.setAttribute('transform',`rotate(${l.a} ${l.cx} ${l.cy})`);
   }
   if(unsettled)frame=requestAnimationFrame(tick);else{frame=0;if(!drag){lines.forEach(l=>l.el.removeAttribute('transform'));lines=[]}}
  }
@@ -223,10 +226,14 @@ function mount(target,input={}){
   if(!options.interactive||drag||e.button!==0)return;
   const mark=e.target.closest('[data-am-mark]');if(!mark||!svg.contains(mark))return;
   reset();const p=point(e);drag={id:e.pointerId,p,dx:0,dy:0};
-  lines=[{el:mark,cx:+mark.getAttribute('data-x'),cy:+mark.getAttribute('data-y'),x:0,y:0,a:0,weight:1,twist:.045}];
+  const cx=+mark.getAttribute('data-x'),cy=+mark.getAttribute('data-y');
+  lines=[...mark.querySelectorAll('line')].map(el=>{
+   const dx=+el.getAttribute('x2')-el.getAttribute('x1'),dy=+el.getAttribute('y2')-el.getAttribute('y1'),length=Math.hypot(dx,dy)||1;
+   return {el,cx,cy,a:0,nx:-dy/length,ny:dx/length};
+  });
   svg.setPointerCapture(e.pointerId);svg.style.setProperty('--am-cursor','grabbing');
  });
- svg.addEventListener('pointermove',e=>{if(!drag||drag.id!==e.pointerId)return;const p=point(e),dx=p.x-drag.p.x,dy=p.y-drag.p.y,d=Math.hypot(dx,dy),scale=d?16*Math.tanh(d/180)/d:0;drag.dx=dx*scale;drag.dy=dy*scale;start()});
+ svg.addEventListener('pointermove',e=>{if(!drag||drag.id!==e.pointerId)return;const p=point(e);drag.dx=p.x-drag.p.x;drag.dy=p.y-drag.p.y;start()});
  ['pointerup','pointercancel','lostpointercapture'].forEach(type=>svg.addEventListener(type,release));
  const blur=()=>{if(drag)release({pointerId:drag.id})};global.addEventListener('blur',blur);
  function refreshBackground(){
