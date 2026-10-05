@@ -40,15 +40,16 @@ function tonalPair(mode,enabled,rng){
  return [base,useWhite?'#FFFFFF':neighbors[Math.floor(rng()*neighbors.length)]];
 }
 
-const defaults={count:8,width:60,length:170,min:0,max:45,negative:true,segments:'mixed',mode:'tonal',colors,seed:null,interactive:true,scale:1,mobileScale:.5,mobile:false};
+const defaults={count:8,width:80,length:170,min:0,max:45,negative:true,segments:'mixed',silhouette:'mixed',mode:'tonal',colors,seed:null,interactive:true,scale:1,mobileScale:.5,mobile:false};
 const instances=new WeakMap();
 function number(v,fallback,lo,hi){v=Number(v);return Number.isFinite(v)?Math.max(lo,Math.min(hi,v)):fallback}
 function normalize(input){
  const o={...defaults,...input};
  o.scale=number(o.scale,1,.1,2);o.mobileScale=number(o.mobileScale,.5,.1,1);
- o.count=Math.round(number(o.count,8,1,100));o.width=number(o.width,60,1,200);o.length=number(o.length,170,1,1000);
+ o.count=Math.round(number(o.count,8,1,100));o.width=number(o.width,80,1,200);o.length=number(o.length,170,1,1000);
  o.min=number(o.min,0,-90,90);o.max=number(o.max,45,o.min,90);
  o.segments=['1','2','3'].includes(String(o.segments))?Number(o.segments):'mixed';
+ o.silhouette=['mixed','fan','crossed-dash'].includes(o.silhouette)?o.silhouette:'mixed';
  o.mode=['free','tonal','white','near'].includes(o.mode)?o.mode:'tonal';
  o.colors=Array.isArray(o.colors)?o.colors.map(c=>String(c).toUpperCase()).filter(c=>colors.includes(c)):colors;
  if(!o.colors.length)o.colors=[...colors];
@@ -69,6 +70,7 @@ function markup(W,H,input){
  const width=o.width*scale,len=o.length*scale;
  let result='';
  for(let i=0;i<o.count;i++){
+  const crossed=o.silhouette==='crossed-dash'||(o.silhouette==='mixed'&&o.segments==='mixed'&&rng()<.25);
   const n=o.segments==='mixed'?1+Math.floor(rng()*3):o.segments;
   const flip=rng()>.5?-1:1,angles=fanAngles(n,o.min,o.max,o.negative,rng),center=(angles[0]+angles[n-1])/2;
   const length=len*(.9+rng()*.1);
@@ -77,8 +79,21 @@ function markup(W,H,input){
   const slackX=Math.max(0,cw-2*envelope),slackY=Math.max(0,ch-2*envelope);
   const x=(i%cols)*cw+envelope+slackX*rng(),y=Math.floor(i/cols)*ch+envelope+slackY*rng();
   const pair=o.mode==='free'?null:tonalPair(o.mode,o.colors,seeded(o.seed+i*7919));let previous='';
-  result+=`<g data-am-mark="${i}" data-x="${x.toFixed(3)}" data-y="${y.toFixed(3)}" style="pointer-events:var(--am-pointer,visiblePainted);cursor:var(--am-cursor,grab)">`;
-  for(let j=0;j<n;j++){
+  result+=`<g data-am-mark="${i}" data-am-silhouette="${crossed?'crossed-dash':'fan'}" data-x="${x.toFixed(3)}" data-y="${y.toFixed(3)}" style="pointer-events:var(--am-pointer,visiblePainted);cursor:var(--am-cursor,grab)">`;
+  if(crossed){
+   // A bent, same-color base with an independent contrasting dash over it.
+   // All endpoints stay within the reserved circular motion envelope.
+   const tilt=(center*.35)*Math.PI/180,c=Math.cos(tilt),s=Math.sin(tilt);
+   const point=(px,py)=>[x+(px*c-py*s)*length*flip,y+(px*s+py*c)*length];
+   const base=pair?pair[0]:o.colors[Math.floor(rng()*o.colors.length)];
+   const accents=o.colors.filter(color=>color!==base);
+   const accent=pair?pair[1]:(accents.length?accents[Math.floor(rng()*accents.length)]:base);
+   const segments=[[-.8,.5,.1,-.5],[-.8,.5,.85,.15],[-.65,-.65,.65,.55]];
+   segments.forEach((coords,j)=>{
+    const a=point(coords[0],coords[1]),b=point(coords[2],coords[3]);
+    result+=`<line data-am-part="${j===2?'dash':'base'}" x1="${a[0].toFixed(3)}" y1="${a[1].toFixed(3)}" x2="${b[0].toFixed(3)}" y2="${b[1].toFixed(3)}" stroke="${j===2?accent:base}" stroke-width="${width.toFixed(3)}" stroke-linecap="round" pathLength="1" class="am-draw-stroke" style="--draw-delay:${i*65+j*100}ms"/>`;
+   });
+  }else for(let j=0;j<n;j++){
    let choices=o.colors.filter(c=>c!==previous);if(!choices.length)choices=o.colors;
    const freeColor=choices[Math.floor(rng()*choices.length)],color=pair?pair[j%2]:freeColor;previous=color;
    result+=`<g class="am-fan-stroke" style="transform-origin:${x.toFixed(3)}px ${y.toFixed(3)}px;--fan-start:${((center-angles[j])*flip).toFixed(3)}deg;--fan-delay:${i*65}ms"><line x1="${x.toFixed(3)}" y1="${y.toFixed(3)}" x2="${(x+ends[j][0]).toFixed(3)}" y2="${(y+ends[j][1]).toFixed(3)}" stroke="${color}" stroke-width="${(width+j*2*scale).toFixed(3)}" stroke-linecap="round" pathLength="1" class="am-draw-stroke" style="--draw-delay:${i*65+j*70}ms"/></g>`;
@@ -144,6 +159,7 @@ function autoMount(){
  document.querySelectorAll('#angle-mark, [data-angle-marks]').forEach(host=>{
   if(instances.has(host))return;
   const options={};
+  if(host.dataset.angleSilhouette)options.silhouette=host.dataset.angleSilhouette;
   if(host.dataset.angleScale)options.scale=host.dataset.angleScale;
   if(host.dataset.angleCount)options.count=host.dataset.angleCount;
   if(host.dataset.angleWidth)options.width=host.dataset.angleWidth;
