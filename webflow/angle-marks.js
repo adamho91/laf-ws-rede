@@ -208,15 +208,18 @@ function mount(target,input={}){
   if(!w)return;
   reset();lastWidth=w;lastHeight=h;
   const board=layout(w,h,{...options,mobile:mobile.matches});
+  // Keep the visual anchor tied to the crossing-dash footprint, rather than
+  // shifting marks when the full rotational safety canvas grows for long fans.
+  const anchor=layout(w,h,{...options,length:options.length/Math.hypot(1.3,1.2),mobile:mobile.matches});
   const rect=host.getBoundingClientRect(),section=host.closest('section, .section');
   const bounds=section?section.getBoundingClientRect():null;
-  const minX=Math.max(0,bounds?bounds.left:0),maxX=Math.max(minX,Math.min(document.documentElement.clientWidth,bounds?bounds.right:document.documentElement.clientWidth)-board.width);
-  const desiredX=rect.left+(w-board.width)/2;
-  const minY=bounds?bounds.top:rect.top,maxY=bounds?Math.max(minY,bounds.bottom-board.height):rect.top;
-  const desiredY=rect.top+(h-board.height)/2;
+  const minX=Math.max(0,bounds?bounds.left:0),maxX=Math.max(minX,Math.min(document.documentElement.clientWidth,bounds?bounds.right:document.documentElement.clientWidth)-anchor.width);
+  const desiredX=rect.left+(w-anchor.width)/2;
+  const minY=bounds?bounds.top:rect.top,maxY=bounds?Math.max(minY,bounds.bottom-anchor.height):rect.top;
+  const desiredY=rect.top+(h-anchor.height)/2;
   svg.style.width=board.width+'px';svg.style.height=board.height+'px';
-  svg.style.left=(Math.max(minX,Math.min(maxX,desiredX))-rect.left-host.clientLeft)+'px';
-  svg.style.top=(Math.max(minY,Math.min(maxY,desiredY))-rect.top-host.clientTop)+'px';
+  svg.style.left=(Math.max(minX,Math.min(maxX,desiredX))-(board.width-anchor.width)/2-rect.left-host.clientLeft)+'px';
+  svg.style.top=(Math.max(minY,Math.min(maxY,desiredY))-(board.height-anchor.height)/2-rect.top-host.clientTop)+'px';
   svg.setAttribute('viewBox',`0 0 ${board.width} ${board.height}`);
   lastBackground=options.backgroundColor||backdrop(host);
   svg.setAttribute("data-am-background",lastBackground);
