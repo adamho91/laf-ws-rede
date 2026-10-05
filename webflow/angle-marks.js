@@ -12,6 +12,7 @@ const colors=['#99EDFF','#FFFFFF','#3FB5FE','#EC0648','#115EF3','#403700','#ADFF
 function randomSeed(){return global.crypto&&global.crypto.getRandomValues?global.crypto.getRandomValues(new Uint32Array(1))[0]:Math.floor(Math.random()*4294967296)}
 function seeded(s){return()=>{s|=0;s=s+0x6D2B79F5|0;let t=Math.imul(s^s>>>15,1|s);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
 
+const maxDragAngle=7,doubleFanMaxOpening=60;
 function fanAngles(n,min,max,negative,rng){
  let ranges=[[min,max]];
  if(negative){
@@ -23,7 +24,13 @@ function fanAngles(n,min,max,negative,rng){
  if(n===1)return[sample(rng())];
  // Spread strokes across the allowed angles instead of independent, overlapping picks.
  const start=rng()*.08,end=1-rng()*.08;
- return Array.from({length:n},(_,j)=>sample(start+(end-start)*j/(n-1)));
+ const angles=Array.from({length:n},(_,j)=>sample(start+(end-start)*j/(n-1)));
+ if(n===2){
+  // Reserve room for both strokes' drag rotation so the opening never exceeds 60deg.
+  const middle=(angles[0]+angles[1])/2,half=Math.min((angles[1]-angles[0])/2,(doubleFanMaxOpening-2*maxDragAngle)/2);
+  return [middle-half,middle+half];
+ }
+ return angles;
 }
 // Curated neighbors keep every pairing inside the supplied reference palette.
 const nearColors={
@@ -237,7 +244,7 @@ function mount(target,input={}){
   for(const l of lines){
    // Drag perpendicular to each stroke to open/close its angle independently.
    // Rotate about the mark's original pivot; never translate or exceed +/-7deg.
-   const ta=drag?Math.max(-7,Math.min(7,(drag.dx*l.nx+drag.dy*l.ny)*7/120)):0;
+   const ta=drag?Math.max(-maxDragAngle,Math.min(maxDragAngle,(drag.dx*l.nx+drag.dy*l.ny)*maxDragAngle/120)):0;
    const ease=reduced.matches?1:drag?.18:.12;
    l.a+=(ta-l.a)*ease;
    if(Math.abs(ta-l.a)>.02)unsettled=true;
