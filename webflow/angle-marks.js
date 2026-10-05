@@ -66,7 +66,7 @@ function tonalPair(mode,enabled,rng,background){
  return [base,accents[Math.floor(rng()*accents.length)]||base];
 }
 
-const defaults={count:8,width:80,length:320.972,min:0,max:45,negative:true,segments:'mixed',silhouette:'mixed',mode:'tonal',colors,seed:null,interactive:true,scale:1,mobileScale:.5,mobile:false,avoidBackground:true,backgroundColor:null};
+const defaults={count:8,width:67.2,length:320.972,min:0,max:45,negative:true,segments:'mixed',silhouette:'mixed',mode:'tonal',colors,seed:null,interactive:true,scale:1,mobileScale:.5,mobile:false,avoidBackground:true,backgroundColor:null};
 // Explicit visual types: mirrored/rotated versions still count as the same silhouette.
 const silhouettes=Object.freeze({
  single:Object.freeze({family:'fan',segments:1}),
@@ -100,7 +100,7 @@ function number(v,fallback,lo,hi){v=Number(v);return Number.isFinite(v)?Math.max
 function normalize(input){
  const o={...defaults,...input};
  o.scale=number(o.scale,1,.1,2);o.mobileScale=number(o.mobileScale,.5,.1,1);
- o.count=Math.round(number(o.count,8,1,100));o.width=number(o.width,80,1,200);o.length=number(o.length,320.972,1,1000);
+ o.count=Math.round(number(o.count,8,1,100));o.width=number(o.width,67.2,1,200);o.length=number(o.length,320.972,1,1000);
  o.min=number(o.min,0,-90,90);o.max=number(o.max,45,o.min,90);
  o.segments=['1','2','3'].includes(String(o.segments))?Number(o.segments):'mixed';
  o.silhouette=['mixed','fan',...silhouetteTypes].includes(o.silhouette)?o.silhouette:'mixed';
