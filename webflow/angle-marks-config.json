@@ -11,5 +11,7 @@
   "negative": true,
   "mode": "tonal",
   "interactive": true,
-  "seed": null
+  "seed": null,
+  "avoidBackground": true,
+  "backgroundColor": null
 }
