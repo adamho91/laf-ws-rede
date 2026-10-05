@@ -1,7 +1,7 @@
 /* Angle Marks — Webflow adapter, adapted from the supplied angle-marks.js.
  * No dependencies. Auto-mounts #angle-mark and [data-angle-marks] after DOM ready.
  * Optional attributes: data-angle-scale="2", data-angle-count="8".
- * Below desktop (<=991px) uses half size. Header silhouettes are chosen without repeats.
+ * Tablets/small laptops (768–1439px): 60px strokes, 20% shorter lines; phones (<=767px): half size. Header silhouettes are chosen without repeats.
  */
 (function(global){
 'use strict';
@@ -66,7 +66,7 @@ function tonalPair(mode,enabled,rng,background){
  return [base,accents[Math.floor(rng()*accents.length)]||base];
 }
 
-const defaults={count:8,width:80,length:269.61648,min:0,max:45,negative:true,segments:'mixed',silhouette:'mixed',mode:'tonal',colors,seed:null,interactive:true,scale:1,mobileScale:.5,mobile:false,avoidBackground:true,backgroundColor:null};
+const defaults={count:8,width:80,length:269.61648,min:0,max:45,negative:true,segments:'mixed',silhouette:'mixed',mode:'tonal',colors,seed:null,interactive:true,scale:1,mobileScale:.5,mobile:false,compact:false,avoidBackground:true,backgroundColor:null};
 // Explicit visual types: mirrored/rotated versions still count as the same silhouette.
 const silhouettes=Object.freeze({
  single:Object.freeze({family:'fan',segments:1}),
@@ -115,17 +115,18 @@ function normalize(input){
  return o;
 }
 function layout(W,H,input={}){
- const o=normalize(input),scale=o.scale*(o.mobile?o.mobileScale:1);
- const diameter=2*(o.length+o.width/2)*scale+48;
+ const o=normalize(input),scale=o.scale*(o.mobile?o.mobileScale:o.compact?.8:1);
+ const strokeScale=o.scale*(o.mobile?o.mobileScale:o.compact?.75:1);
+ const diameter=2*(o.length*scale+o.width*strokeScale/2)+48;
  const cols=Math.min(o.count,Math.max(1,Math.floor(W/diameter))),rows=Math.ceil(o.count/cols);
- return {width:Math.max(W,cols*diameter),height:Math.max(H,rows*diameter),cols,rows,scale};
+ return {width:Math.max(W,cols*diameter),height:Math.max(H,rows*diameter),cols,rows,scale,strokeScale};
 }
 function markup(W,H,input){
  W=Number(W);H=Number(H);if(!Number.isFinite(W)||!Number.isFinite(H)||W<=0||H<=0)return "";
  const o=normalize(input),rng=seeded(o.seed);
  // Dimensions affect placement only. Stroke width and length never auto-fit.
  const board=layout(W,H,o),cols=board.cols,rows=board.rows,cw=board.width/cols,ch=board.height/rows;
- const scale=board.scale,width=o.width*scale,len=o.length*scale;
+ const scale=board.scale,width=o.width*board.strokeScale,len=o.length*scale;
  const edge=8,dragLimit=16;
  let result='';
  for(let i=0;i<o.count;i++){
@@ -199,7 +200,8 @@ function mount(target,input={}){
  svg.style.cssText='position:absolute;left:0;top:0;display:block;overflow:visible;z-index:0;';
  host.prepend(svg);
  let drag=null,frame=0,lines=[];
- const mobile=global.matchMedia('(max-width: 991px)');
+ const mobile=global.matchMedia('(max-width: 767px)');
+ const compact=global.matchMedia('(max-width: 1439px)');
  const reduced=global.matchMedia('(prefers-reduced-motion: reduce)');
  function reset(){const pointerId=drag?.id;drag=null;if(pointerId!=null&&svg.hasPointerCapture(pointerId))svg.releasePointerCapture(pointerId);cancelAnimationFrame(frame);frame=0;lines.forEach(l=>l.el.removeAttribute('transform'));lines=[];svg.style.setProperty('--am-cursor','grab')}
  function draw(animate=false){
@@ -207,10 +209,11 @@ function mount(target,input={}){
   const w=host.clientWidth,h=host.clientHeight;
   if(!w)return;
   reset();lastWidth=w;lastHeight=h;
-  const board=layout(w,h,{...options,mobile:mobile.matches});
+  const sizing={mobile:mobile.matches,compact:!mobile.matches&&compact.matches};
+  const board=layout(w,h,{...options,...sizing});
   // Keep the visual anchor tied to the crossing-dash footprint, rather than
   // shifting marks when the full rotational safety canvas grows for long fans.
-  const anchor=layout(w,h,{...options,length:options.length/Math.hypot(1.3,1.2),mobile:mobile.matches});
+  const anchor=layout(w,h,{...options,length:options.length/Math.hypot(1.3,1.2),...sizing});
   const rect=host.getBoundingClientRect(),section=host.closest('section, .section');
   const bounds=section?section.getBoundingClientRect():null;
   const minX=Math.max(0,bounds?bounds.left:0),maxX=Math.max(minX,Math.min(document.documentElement.clientWidth,bounds?bounds.right:document.documentElement.clientWidth)-anchor.width);
@@ -223,7 +226,7 @@ function mount(target,input={}){
   svg.setAttribute('viewBox',`0 0 ${board.width} ${board.height}`);
   lastBackground=options.backgroundColor||backdrop(host);
   svg.setAttribute("data-am-background",lastBackground);
-  svg.innerHTML=(animate||!painted?`<style>${drawStyles}</style>`:'')+markup(w,h,{...options,assignedSilhouettes,mobile:mobile.matches,backgroundColor:lastBackground});
+  svg.innerHTML=(animate||!painted?`<style>${drawStyles}</style>`:'')+markup(w,h,{...options,assignedSilhouettes,...sizing,backgroundColor:lastBackground});
   svg.style.pointerEvents='none';svg.style.setProperty('--am-pointer',options.interactive?'visiblePainted':'none');svg.style.touchAction='pan-y';painted=true;
  }
  function point(e){const m=svg.getScreenCTM();return new DOMPoint(e.clientX,e.clientY).matrixTransform(m.inverse())}
@@ -268,11 +271,11 @@ function mount(target,input={}){
   ancestors.push(el);backgroundObserver.observe(el,{attributes:true,attributeFilter:['class','style']});
   el.addEventListener('transitionend',refreshBackground);
  }
- const onMobileChange=()=>draw(false);mobile.addEventListener("change",onMobileChange);
+ const onMobileChange=()=>draw(false);mobile.addEventListener("change",onMobileChange);compact.addEventListener("change",onMobileChange);
  const onViewportResize=()=>{cancelAnimationFrame(resizeFrame);resizeFrame=requestAnimationFrame(()=>draw(false))};global.addEventListener("resize",onViewportResize,{passive:true});
  const observer=new ResizeObserver(()=>{cancelAnimationFrame(resizeFrame);resizeFrame=requestAnimationFrame(()=>{if(lastWidth!==host.clientWidth||lastHeight!==host.clientHeight)draw(false)})});
  observer.observe(host);
- const api={regenerate(){options.seed=randomSeed();assignSilhouettes();draw(true)},update(next){options=normalize({...options,...next});if(['seed','count','silhouette','segments'].some(key=>Object.prototype.hasOwnProperty.call(next,key)))assignSilhouettes();draw(false)},destroy(){destroyed=true;if(group)group.delete(host);observer.disconnect();backgroundObserver.disconnect();cancelAnimationFrame(backgroundFrame);ancestors.forEach(el=>el.removeEventListener('transitionend',refreshBackground));cancelAnimationFrame(resizeFrame);reset();global.removeEventListener('blur',blur);global.removeEventListener('resize',onViewportResize);mobile.removeEventListener('change',onMobileChange);svg.remove();if(host.style.position==='relative')host.style.position=oldPosition;instances.delete(host)}};
+ const api={regenerate(){options.seed=randomSeed();assignSilhouettes();draw(true)},update(next){options=normalize({...options,...next});if(['seed','count','silhouette','segments'].some(key=>Object.prototype.hasOwnProperty.call(next,key)))assignSilhouettes();draw(false)},destroy(){destroyed=true;if(group)group.delete(host);observer.disconnect();backgroundObserver.disconnect();cancelAnimationFrame(backgroundFrame);ancestors.forEach(el=>el.removeEventListener('transitionend',refreshBackground));cancelAnimationFrame(resizeFrame);reset();global.removeEventListener('blur',blur);global.removeEventListener('resize',onViewportResize);mobile.removeEventListener('change',onMobileChange);compact.removeEventListener('change',onMobileChange);svg.remove();if(host.style.position==='relative')host.style.position=oldPosition;instances.delete(host)}};
  instances.set(host,api);draw(true);return api;
 }
 global.AngleMarks={mount,markup,layout,silhouettes,styles:drawStyles};
