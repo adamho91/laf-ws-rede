@@ -1,7 +1,7 @@
 /* Angle Marks — Webflow adapter, adapted from the supplied angle-marks.js.
  * No dependencies. Auto-mounts #angle-mark and [data-angle-marks] after DOM ready.
  * Optional attributes: data-angle-scale="2", data-angle-count="8".
- * Container must have a height/min-height. Mobile (<=767px) uses half size.
+ * Container must have a height/min-height. Below desktop (<=991px) uses half size.
  */
 (function(global){
 'use strict';
@@ -85,18 +85,19 @@ function normalize(input){
  o.seed=o.seed==null?randomSeed():number(o.seed,1,0,4294967295);
  return o;
 }
+function layout(W,H,input={}){
+ const o=normalize(input),scale=o.scale*(o.mobile?o.mobileScale:1);
+ const diameter=2*(o.length+o.width/2)*scale+48;
+ const cols=Math.min(o.count,Math.max(1,Math.floor(W/diameter))),rows=Math.ceil(o.count/cols);
+ return {width:Math.max(W,cols*diameter),height:Math.max(H,rows*diameter),cols,rows,scale};
+}
 function markup(W,H,input){
  W=Number(W);H=Number(H);if(!Number.isFinite(W)||!Number.isFinite(H)||W<=0||H<=0)return "";
  const o=normalize(input),rng=seeded(o.seed);
- const cols=Math.min(o.count,Math.max(1,Math.ceil(Math.sqrt(o.count*W/H)))),rows=Math.ceil(o.count/cols),cw=W/cols,ch=H/rows;
- // Reserve the complete rotation envelope, round caps, and maximum drag.
- // Apply mobile sizing after fitting, so it is genuinely half the same layout.
- const cell=Math.min(cw,ch),edge=Math.min(8,cell*.05);
- const dragLimit=Math.min(16,W/40,H/40,cell*.1);
- const available=Math.max(0,cell/2-edge-dragLimit);
- const radius=(o.length+(o.width+4)/2)*o.scale;
- const scale=o.scale*Math.min(1,available/radius)*(o.mobile?o.mobileScale:1);
- const width=o.width*scale,len=o.length*scale;
+ // Dimensions affect placement only. Stroke width and length never auto-fit.
+ const board=layout(W,H,o),cols=board.cols,rows=board.rows,cw=board.width/cols,ch=board.height/rows;
+ const scale=board.scale,width=o.width*scale,len=o.length*scale;
+ const edge=8,dragLimit=16;
  let result='';
  for(let i=0;i<o.count;i++){
   const crossed=o.silhouette==='crossed-dash'||(o.silhouette==='mixed'&&o.segments==='mixed'&&rng()<.25);
@@ -104,7 +105,7 @@ function markup(W,H,input){
   const flip=rng()>.5?-1:1,angles=fanAngles(n,o.min,o.max,o.negative,rng),center=(angles[0]+angles[n-1])/2;
   const length=len*(.9+rng()*.1);
   const ends=angles.map(a=>[Math.cos(a*Math.PI/180)*length*flip,Math.sin(a*Math.PI/180)*length]);
-  const envelope=length+(width+4*scale)/2+dragLimit+edge;
+  const envelope=length+width/2+dragLimit+edge;
   const slackX=Math.max(0,cw-2*envelope),slackY=Math.max(0,ch-2*envelope);
   const x=(i%cols)*cw+envelope+slackX*rng(),y=Math.floor(i/cols)*ch+envelope+slackY*rng();
   const pair=o.mode==='free'?null:tonalPair(o.mode,o.colors,seeded(o.seed+i*7919),o.avoidBackground?o.backgroundColor:null);let previous='';
@@ -125,7 +126,7 @@ function markup(W,H,input){
   }else for(let j=0;j<n;j++){
    let choices=o.colors.filter(c=>c!==previous);if(!choices.length)choices=o.colors;
    const freeColor=choices[Math.floor(rng()*choices.length)],color=pair?pair[j%2]:freeColor;previous=color;
-   result+=`<g class="am-fan-stroke" style="transform-origin:${x.toFixed(3)}px ${y.toFixed(3)}px;--fan-start:${((center-angles[j])*flip).toFixed(3)}deg;--fan-delay:${i*65}ms"><line x1="${x.toFixed(3)}" y1="${y.toFixed(3)}" x2="${(x+ends[j][0]).toFixed(3)}" y2="${(y+ends[j][1]).toFixed(3)}" stroke="${color}" stroke-width="${(width+j*2*scale).toFixed(3)}" stroke-linecap="round" pathLength="1" class="am-draw-stroke" style="--draw-delay:${i*65+j*70}ms"/></g>`;
+   result+=`<g class="am-fan-stroke" style="transform-origin:${x.toFixed(3)}px ${y.toFixed(3)}px;--fan-start:${((center-angles[j])*flip).toFixed(3)}deg;--fan-delay:${i*65}ms"><line x1="${x.toFixed(3)}" y1="${y.toFixed(3)}" x2="${(x+ends[j][0]).toFixed(3)}" y2="${(y+ends[j][1]).toFixed(3)}" stroke="${color}" stroke-width="${width.toFixed(3)}" stroke-linecap="round" pathLength="1" class="am-draw-stroke" style="--draw-delay:${i*65+j*70}ms"/></g>`;
   }
   result+='</g>';
  }
@@ -140,17 +141,28 @@ function mount(target,input={}){
  if(getComputedStyle(host).position==='static')host.style.position='relative';
  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
  svg.setAttribute('aria-hidden','true');svg.setAttribute('focusable','false');
- svg.style.cssText='position:absolute;inset:0;width:100%;height:100%;display:block;overflow:hidden;z-index:0;';
+ svg.style.cssText='position:absolute;left:0;top:0;display:block;overflow:visible;z-index:0;';
  host.prepend(svg);
  let drag=null,frame=0,lines=[];
- const mobile=global.matchMedia('(max-width: 767px)');
+ const mobile=global.matchMedia('(max-width: 991px)');
  const reduced=global.matchMedia('(prefers-reduced-motion: reduce)');
  function reset(){drag=null;cancelAnimationFrame(frame);frame=0;lines.forEach(l=>l.el.removeAttribute('transform'));lines=[];svg.style.setProperty('--am-cursor','grab')}
  function draw(animate=false){
   if(destroyed)return;
   const w=host.clientWidth,h=host.clientHeight;
-  if(!w||!h)return;
-  reset();lastWidth=w;lastHeight=h;svg.setAttribute('viewBox',`0 0 ${w} ${h}`);
+  if(!w)return;
+  reset();lastWidth=w;lastHeight=h;
+  const board=layout(w,h,{...options,mobile:mobile.matches});
+  const rect=host.getBoundingClientRect(),section=host.closest('section, .section');
+  const bounds=section?section.getBoundingClientRect():null;
+  const minX=Math.max(0,bounds?bounds.left:0),maxX=Math.max(minX,Math.min(document.documentElement.clientWidth,bounds?bounds.right:document.documentElement.clientWidth)-board.width);
+  const desiredX=rect.left+(w-board.width)/2;
+  const minY=bounds?bounds.top:rect.top,maxY=bounds?Math.max(minY,bounds.bottom-board.height):rect.top;
+  const desiredY=rect.top+(h-board.height)/2;
+  svg.style.width=board.width+'px';svg.style.height=board.height+'px';
+  svg.style.left=(Math.max(minX,Math.min(maxX,desiredX))-rect.left-host.clientLeft)+'px';
+  svg.style.top=(Math.max(minY,Math.min(maxY,desiredY))-rect.top-host.clientTop)+'px';
+  svg.setAttribute('viewBox',`0 0 ${board.width} ${board.height}`);
   lastBackground=options.backgroundColor||backdrop(host);
   svg.setAttribute("data-am-background",lastBackground);
   svg.innerHTML=(animate||!painted?`<style>${drawStyles}</style>`:'')+markup(w,h,{...options,mobile:mobile.matches,backgroundColor:lastBackground});
@@ -176,7 +188,7 @@ function mount(target,input={}){
   lines=[{el:mark,cx:+mark.getAttribute('data-x'),cy:+mark.getAttribute('data-y'),x:0,y:0,a:0,weight:1,twist:.045}];
   svg.setPointerCapture(e.pointerId);svg.style.setProperty('--am-cursor','grabbing');
  });
- svg.addEventListener('pointermove',e=>{if(!drag||drag.id!==e.pointerId)return;const p=point(e),dx=p.x-drag.p.x,dy=p.y-drag.p.y,d=Math.hypot(dx,dy),cols=Math.min(options.count,Math.max(1,Math.ceil(Math.sqrt(options.count*lastWidth/lastHeight)))),rows=Math.ceil(options.count/cols),limit=Math.min(16,lastWidth/40,lastHeight/40,Math.min(lastWidth/cols,lastHeight/rows)*.1),scale=d?limit*Math.tanh(d/180)/d:0;drag.dx=dx*scale;drag.dy=dy*scale;start()});
+ svg.addEventListener('pointermove',e=>{if(!drag||drag.id!==e.pointerId)return;const p=point(e),dx=p.x-drag.p.x,dy=p.y-drag.p.y,d=Math.hypot(dx,dy),scale=d?16*Math.tanh(d/180)/d:0;drag.dx=dx*scale;drag.dy=dy*scale;start()});
  ['pointerup','pointercancel','lostpointercapture'].forEach(type=>svg.addEventListener(type,release));
  const blur=()=>{if(drag)release({pointerId:drag.id})};global.addEventListener('blur',blur);
  function refreshBackground(){
@@ -192,12 +204,13 @@ function mount(target,input={}){
   el.addEventListener('transitionend',refreshBackground);
  }
  const onMobileChange=()=>draw(false);mobile.addEventListener("change",onMobileChange);
+ const onViewportResize=()=>{cancelAnimationFrame(resizeFrame);resizeFrame=requestAnimationFrame(()=>draw(false))};global.addEventListener("resize",onViewportResize,{passive:true});
  const observer=new ResizeObserver(()=>{cancelAnimationFrame(resizeFrame);resizeFrame=requestAnimationFrame(()=>{if(lastWidth!==host.clientWidth||lastHeight!==host.clientHeight)draw(false)})});
  observer.observe(host);
- const api={regenerate(){options.seed=randomSeed();draw(true)},update(next){options=normalize({...options,...next});draw(false)},destroy(){destroyed=true;observer.disconnect();backgroundObserver.disconnect();cancelAnimationFrame(backgroundFrame);ancestors.forEach(el=>el.removeEventListener('transitionend',refreshBackground));cancelAnimationFrame(resizeFrame);reset();global.removeEventListener('blur',blur);mobile.removeEventListener('change',onMobileChange);svg.remove();if(host.style.position==='relative')host.style.position=oldPosition;instances.delete(host)}};
+ const api={regenerate(){options.seed=randomSeed();draw(true)},update(next){options=normalize({...options,...next});draw(false)},destroy(){destroyed=true;observer.disconnect();backgroundObserver.disconnect();cancelAnimationFrame(backgroundFrame);ancestors.forEach(el=>el.removeEventListener('transitionend',refreshBackground));cancelAnimationFrame(resizeFrame);reset();global.removeEventListener('blur',blur);global.removeEventListener('resize',onViewportResize);mobile.removeEventListener('change',onMobileChange);svg.remove();if(host.style.position==='relative')host.style.position=oldPosition;instances.delete(host)}};
  instances.set(host,api);draw(true);return api;
 }
-global.AngleMarks={mount,markup,styles:drawStyles};
+global.AngleMarks={mount,markup,layout,styles:drawStyles};
 function autoMount(){
  document.querySelectorAll('#angle-mark, [data-angle-marks]').forEach(host=>{
   if(instances.has(host))return;
