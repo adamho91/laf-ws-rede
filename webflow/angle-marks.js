@@ -6,7 +6,7 @@
 (function(global){
 'use strict';
 if(global.AngleMarks)return;
-const drawStyles = `.am-draw-stroke{stroke-dasharray:1 1;animation:am-draw-line 650ms cubic-bezier(.22,.61,.36,1) var(--draw-delay,0ms) both}@keyframes am-draw-line{0%{stroke-dashoffset:1;opacity:0}1%{opacity:1}100%{stroke-dashoffset:0;opacity:1}}.am-fan-stroke{transform-box:view-box;animation:am-fan-open 800ms cubic-bezier(.22,.61,.36,1) var(--fan-delay,0ms) both}@keyframes am-fan-open{from{transform:rotate(var(--fan-start,0deg))}to{transform:rotate(0deg)}}@media(prefers-reduced-motion:reduce){.am-draw-stroke,.am-fan-stroke{animation:none;stroke-dashoffset:0}}`;
+const drawStyles = `.am-draw-stroke{stroke-dasharray:1 1;animation:am-draw-line 650ms cubic-bezier(.22,.61,.36,1) var(--draw-delay,0ms) both}@keyframes am-draw-line{0%{stroke-dashoffset:1;opacity:0}1%{opacity:1}100%{stroke-dashoffset:0;opacity:1}}.am-fan-stroke{transform-box:view-box;animation:am-fan-open 800ms cubic-bezier(.22,.61,.36,1) var(--fan-delay,0ms) both}@keyframes am-fan-open{from{transform:rotate(var(--fan-start,0deg))}to{transform:rotate(0deg)}}.am-joint-cap{animation:am-joint-appear 1ms steps(1,end) var(--joint-delay,0ms) both}@keyframes am-joint-appear{from{opacity:0}to{opacity:1}}@media(prefers-reduced-motion:reduce){.am-draw-stroke,.am-fan-stroke,.am-joint-cap{animation:none;stroke-dashoffset:0}}`;
 const colors=['#99EDFF','#FFFFFF','#3FB5FE','#EC0648','#115EF3','#403700','#ADFF00','#D5BBFF','#F57EC3'];
 function randomSeed(){return global.crypto&&global.crypto.getRandomValues?global.crypto.getRandomValues(new Uint32Array(1))[0]:Math.floor(Math.random()*4294967296)}
 function seeded(s){return()=>{s|=0;s=s+0x6D2B79F5|0;let t=Math.imul(s^s>>>15,1|s);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
@@ -155,6 +155,13 @@ function markup(W,H,input){
    let choices=o.colors.filter(c=>c!==previous);if(!choices.length)choices=o.colors;
    const freeColor=choices[Math.floor(rng()*choices.length)],color=pair?pair[j%2]:freeColor;previous=color;
    result+=`<g class="am-fan-stroke" style="transform-origin:${x.toFixed(3)}px ${y.toFixed(3)}px;--fan-start:${((center-angles[j])*flip).toFixed(3)}deg;--fan-delay:${i*65}ms"><line x1="${x.toFixed(3)}" y1="${y.toFixed(3)}" x2="${(x+ends[j][0]).toFixed(3)}" y2="${(y+ends[j][1]).toFixed(3)}" stroke="${color}" stroke-width="${width.toFixed(3)}" stroke-linecap="round" pathLength="1" class="am-draw-stroke" style="--draw-delay:${i*65+j*70}ms"/></g>`;
+  }
+  if(!crossed&&n>1){
+   // Coincident round caps rasterize differently at different stroke angles.
+   // Seal their shared pivot with the top stroke's color and a subpixel bleed
+   // so the lower colors cannot fringe through, including during angle drags.
+   const bleed=Math.min(.75,width*.025),radius=width/2+bleed;
+   result+=`<circle data-am-joint-cap="true" cx="${x.toFixed(3)}" cy="${y.toFixed(3)}" r="${radius.toFixed(3)}" fill="${previous}" class="am-joint-cap" style="--joint-delay:${i*65+(n-1)*70+8}ms"/>`;
   }
   result+='</g>';
  }
