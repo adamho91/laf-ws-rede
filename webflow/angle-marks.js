@@ -2,7 +2,7 @@
  * No dependencies. Auto-mounts #angle-mark and [data-angle-marks] after DOM ready.
  * Optional attributes: data-angle-scale="2", data-angle-count="8".
  * Desktop (>=1440px) lines use 92% length with unchanged 80px strokes.
- * Tablets/small laptops (768–1439px): 60px strokes, 20% shorter lines; phones (<=767px): half size. Header silhouettes are chosen without repeats.
+ * Tablets/small laptops (768–1439px): 60px strokes, 20% shorter lines; phones (<=767px): half-length lines, 50px strokes, and a tighter angle spread. Header silhouettes are chosen without repeats.
  */
 (function(global){
 'use strict';
@@ -67,7 +67,7 @@ function tonalPair(mode,enabled,rng,background){
  return [base,accents[Math.floor(rng()*accents.length)]||base];
 }
 
-const defaults={count:8,width:80,length:269.61648,min:0,max:45,negative:true,segments:'mixed',silhouette:'mixed',mode:'tonal',colors,seed:null,interactive:true,scale:1,mobileScale:.5,mobile:false,compact:false,avoidBackground:true,backgroundColor:null};
+const defaults={count:8,width:80,length:269.61648,min:0,max:45,negative:true,segments:'mixed',silhouette:'mixed',mode:'tonal',colors,seed:null,interactive:true,scale:1,mobileScale:.5,mobileStrokeAdd:10,mobileAngleScale:2/3,mobile:false,compact:false,avoidBackground:true,backgroundColor:null};
 // Explicit visual types: mirrored/rotated versions still count as the same silhouette.
 const silhouettes=Object.freeze({
  single:Object.freeze({family:'fan',segments:1}),
@@ -101,6 +101,7 @@ function number(v,fallback,lo,hi){v=Number(v);return Number.isFinite(v)?Math.max
 function normalize(input){
  const o={...defaults,...input};
  o.scale=number(o.scale,1,.1,2);o.mobileScale=number(o.mobileScale,.5,.1,1);
+ o.mobileStrokeAdd=number(o.mobileStrokeAdd,10,0,100);o.mobileAngleScale=number(o.mobileAngleScale,2/3,.1,1);
  o.count=Math.round(number(o.count,8,1,100));o.width=number(o.width,80,1,200);o.length=number(o.length,269.61648,1,1000);
  o.min=number(o.min,0,-90,90);o.max=number(o.max,45,o.min,90);
  o.segments=['1','2','3'].includes(String(o.segments))?Number(o.segments):'mixed';
@@ -117,7 +118,7 @@ function normalize(input){
 }
 function layout(W,H,input={}){
  const o=normalize(input),scale=o.scale*(o.mobile?o.mobileScale:o.compact?.8:.92);
- const strokeScale=o.scale*(o.mobile?o.mobileScale:o.compact?.75:1);
+ const strokeScale=o.scale*(o.mobile?o.mobileScale+o.mobileStrokeAdd/o.width:o.compact?.75:1);
  const diameter=2*(o.length*scale+o.width*strokeScale/2)+48;
  const cols=Math.min(o.count,Math.max(1,Math.floor(W/diameter))),rows=Math.ceil(o.count/cols);
  return {width:Math.max(W,cols*diameter),height:Math.max(H,rows*diameter),cols,rows,scale,strokeScale};
@@ -133,7 +134,7 @@ function markup(W,H,input){
  for(let i=0;i<o.count;i++){
   const type=o.assignedSilhouettes?.[i]||chooseSilhouette(o,rng);
   const shape=silhouettes[type],crossed=shape.family==='crossed-dash',n=shape.segments;
-  const flip=rng()>.5?-1:1,angles=fanAngles(n,o.min,o.max,o.negative,rng),center=(angles[0]+angles[n-1])/2;
+  const flip=rng()>.5?-1:1,angleScale=o.mobile?o.mobileAngleScale:1,angles=fanAngles(n,o.min*angleScale,o.max*angleScale,o.negative,rng),center=(angles[0]+angles[n-1])/2;
   rng(); // Preserve the seeded color/orientation sequence; lengths no longer vary.
   const length=len;
   const ends=angles.map(a=>[Math.cos(a*Math.PI/180)*length*flip,Math.sin(a*Math.PI/180)*length]);
