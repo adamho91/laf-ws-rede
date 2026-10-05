@@ -105,7 +105,8 @@ function normalize(input){
  o.segments=['1','2','3'].includes(String(o.segments))?Number(o.segments):'mixed';
  o.silhouette=['mixed','fan',...silhouetteTypes].includes(o.silhouette)?o.silhouette:'mixed';
  o.mode=['free','tonal','white','near'].includes(o.mode)?o.mode:'tonal';
- o.colors=Array.isArray(o.colors)?o.colors.map(c=>String(c).toUpperCase()).filter(c=>colors.includes(c)):colors;
+ // Explicit page palettes may include brand colors outside the default palette.
+ o.colors=Array.isArray(o.colors)?o.colors.map(c=>String(c).trim().toUpperCase()).filter(c=>/^#[0-9A-F]{6}$/.test(c)):colors;
  if(!o.colors.length)o.colors=[...colors];
  const background=o.avoidBackground?o.backgroundColor:null;
  o.colors=o.colors.filter(c=>!matchesBackground(c,background));
