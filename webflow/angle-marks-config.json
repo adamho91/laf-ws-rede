@@ -1,0 +1,15 @@
+{
+  "count": 8,
+  "width": 80,
+  "length": 170,
+  "scale": 1,
+  "mobileScale": 0.5,
+  "silhouette": "mixed",
+  "segments": "mixed",
+  "min": 0,
+  "max": 45,
+  "negative": true,
+  "mode": "tonal",
+  "interactive": true,
+  "seed": null
+}
