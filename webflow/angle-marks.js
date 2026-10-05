@@ -1,6 +1,7 @@
 /* Angle Marks — Webflow adapter, adapted from the supplied angle-marks.js.
  * No dependencies. Auto-mounts #angle-mark and [data-angle-marks] after DOM ready.
  * Optional attributes: data-angle-scale="2", data-angle-count="8".
+ * Desktop (>=1440px) lines use 92% length with unchanged 80px strokes.
  * Tablets/small laptops (768–1439px): 60px strokes, 20% shorter lines; phones (<=767px): half size. Header silhouettes are chosen without repeats.
  */
 (function(global){
@@ -115,7 +116,7 @@ function normalize(input){
  return o;
 }
 function layout(W,H,input={}){
- const o=normalize(input),scale=o.scale*(o.mobile?o.mobileScale:o.compact?.8:1);
+ const o=normalize(input),scale=o.scale*(o.mobile?o.mobileScale:o.compact?.8:.92);
  const strokeScale=o.scale*(o.mobile?o.mobileScale:o.compact?.75:1);
  const diameter=2*(o.length*scale+o.width*strokeScale/2)+48;
  const cols=Math.min(o.count,Math.max(1,Math.floor(W/diameter))),rows=Math.ceil(o.count/cols);
