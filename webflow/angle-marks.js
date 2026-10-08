@@ -280,6 +280,9 @@ function mount(target,input={}){
  function start(){if(!frame)frame=requestAnimationFrame(tick)}
  function release(e){if(!drag||drag.id!==e.pointerId)return;drag=null;svg.style.setProperty('--am-cursor','grab');if(svg.hasPointerCapture(e.pointerId))svg.releasePointerCapture(e.pointerId);start()}
  svg.addEventListener('pointerdown',e=>{
+  // A finger on this decorative artwork should scroll the page, not start a drag.
+  // Retain the angle interaction for mouse and pen input.
+  if(e.pointerType==='touch')return;
   if(!options.interactive||drag||e.button!==0)return;
   const mark=e.target.closest('[data-am-mark]');if(!mark||!svg.contains(mark))return;
   reset();const p=point(e);drag={id:e.pointerId,p,dx:0,dy:0};
