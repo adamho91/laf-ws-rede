@@ -74,7 +74,7 @@ function tonalPair(mode,enabled,rng,background){
  return [base,accents[Math.floor(rng()*accents.length)]||base];
 }
 
-const defaults={count:8,width:80,length:269.61648,min:0,max:45,negative:true,segments:'mixed',silhouette:'mixed',mode:'tonal',colors,seed:null,interactive:true,scale:1,mobileScale:.5,mobileStrokeAdd:10,mobileAngleScale:2/3,mobile:false,compact:false,avoidBackground:true,backgroundColor:null};
+const defaults={count:8,width:80,length:269.61648,min:0,max:45,negative:true,segments:'mixed',silhouette:'mixed',mode:'tonal',colors,seed:null,interactive:true,scale:1,mobileScale:.5,mobileStrokeAdd:10,mobileAngleScale:2/3,mobileFit:false,mobile:false,compact:false,avoidBackground:true,backgroundColor:null};
 // Explicit visual types: mirrored/rotated versions still count as the same silhouette.
 const silhouettes=Object.freeze({
  single:Object.freeze({family:'fan',segments:1}),
@@ -187,6 +187,28 @@ function markup(W,H,input){
  }
  return result;
 }
+// A shared fitting envelope preserves equal primitive lengths across silhouettes.
+// Convert the stroke to viewBox units instead of relying on SVG vector-effect,
+// which can differ when WebKit also transforms the animated stroke groups.
+function fitMobile(svg,w,h){
+ const strokes=[...svg.querySelectorAll('line')];
+ let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity,length=0;
+ for(const line of strokes){
+  const x1=+line.getAttribute('x1'),y1=+line.getAttribute('y1'),x2=+line.getAttribute('x2'),y2=+line.getAttribute('y2');
+  minX=Math.min(minX,x1,x2);maxX=Math.max(maxX,x1,x2);
+  minY=Math.min(minY,y1,y2);maxY=Math.max(maxY,y1,y2);
+  length=Math.max(length,Math.hypot(x2-x1,y2-y1));
+ }
+ const stroke=40,inset=12;
+ const scale=Math.min(.8,(w-stroke-inset*2)/(length*1.3),(h-stroke-inset*2)/(length*1.3));
+ if(!Number.isFinite(scale)||scale<=0||!length)return;
+ const width=w/scale,height=h/scale;
+ svg.setAttribute('viewBox',[(minX+maxX-width)/2,(minY+maxY-height)/2,width,height].join(' '));
+ svg.style.width=w+'px';svg.style.height=h+'px';svg.style.left='0px';svg.style.top='0px';
+ strokes.forEach(line=>line.setAttribute('stroke-width',String(stroke/scale)));
+ svg.querySelectorAll('[data-am-joint-cap]').forEach(cap=>cap.setAttribute('r',String((stroke/2+.5)/scale)));
+ svg.setAttribute('data-am-mobile-fit','true');
+}
 function mount(target,input={}){
  const host=typeof target==='string'?document.querySelector(target):target;
  if(!host)return null;
@@ -200,7 +222,7 @@ function mount(target,input={}){
   assignedSilhouettes=Array.from({length:options.count},()=>{const type=chooseSilhouette(options,rng,used);used.push(type);return type});
   group.set(host,assignedSilhouettes);
  }
- let options=normalize(input),destroyed=false,painted=false,lastWidth=0,lastHeight=0,resizeFrame=0,backgroundFrame=0,lastBackground=null;
+ let options=normalize({mobileFit:host.hasAttribute('data-angle-mobile-fit'),...input}),destroyed=false,painted=false,lastWidth=0,lastHeight=0,lastViewportWidth=0,resizeFrame=0,backgroundFrame=0,lastBackground=null;
  assignSilhouettes();
  const oldPosition=host.style.position;
  if(getComputedStyle(host).position==='static')host.style.position='relative';
@@ -217,7 +239,7 @@ function mount(target,input={}){
   if(destroyed)return;
   const w=host.clientWidth,h=host.clientHeight;
   if(!w)return;
-  reset();lastWidth=w;lastHeight=h;
+  reset();lastWidth=w;lastHeight=h;lastViewportWidth=document.documentElement.clientWidth;
   const sizing={mobile:mobile.matches,compact:!mobile.matches&&compact.matches};
   const board=layout(w,h,{...options,...sizing});
   // Keep the visual anchor tied to the crossing-dash footprint, rather than
@@ -236,6 +258,9 @@ function mount(target,input={}){
   lastBackground=options.backgroundColor||backdrop(host);
   svg.setAttribute("data-am-background",lastBackground);
   svg.innerHTML=(animate||!painted?`<style>${drawStyles}</style>`:'')+markup(w,h,{...options,assignedSilhouettes,...sizing,backgroundColor:lastBackground});
+  svg.removeAttribute('data-am-mobile-fit');
+  // Fit synchronously, before the browser can paint an oversized intermediate frame.
+  if(sizing.mobile&&options.mobileFit&&options.count===1)fitMobile(svg,w,h);
   svg.style.pointerEvents='none';svg.style.setProperty('--am-pointer',options.interactive?'visiblePainted':'none');svg.style.touchAction='pan-y';painted=true;
  }
  function point(e){const m=svg.getScreenCTM();return new DOMPoint(e.clientX,e.clientY).matrixTransform(m.inverse())}
@@ -281,7 +306,11 @@ function mount(target,input={}){
   el.addEventListener('transitionend',refreshBackground);
  }
  const onMobileChange=()=>draw(false);mobile.addEventListener("change",onMobileChange);compact.addEventListener("change",onMobileChange);
- const onViewportResize=()=>{cancelAnimationFrame(resizeFrame);resizeFrame=requestAnimationFrame(()=>draw(false))};global.addEventListener("resize",onViewportResize,{passive:true});
+ const onViewportResize=()=>{cancelAnimationFrame(resizeFrame);resizeFrame=requestAnimationFrame(()=>{
+  // Mobile browser chrome changes viewport height during scrolling. Leave the
+  // current drawing/drag untouched unless its width or native slot changed.
+  if(lastViewportWidth!==document.documentElement.clientWidth||lastWidth!==host.clientWidth||lastHeight!==host.clientHeight)draw(false);
+ })};global.addEventListener("resize",onViewportResize,{passive:true});
  const observer=new ResizeObserver(()=>{cancelAnimationFrame(resizeFrame);resizeFrame=requestAnimationFrame(()=>{if(lastWidth!==host.clientWidth||lastHeight!==host.clientHeight)draw(false)})});
  observer.observe(host);
  const api={regenerate(){options.seed=randomSeed();assignSilhouettes();draw(true)},update(next){options=normalize({...options,...next});if(['seed','count','silhouette','segments'].some(key=>Object.prototype.hasOwnProperty.call(next,key)))assignSilhouettes();draw(false)},destroy(){destroyed=true;if(group)group.delete(host);observer.disconnect();backgroundObserver.disconnect();cancelAnimationFrame(backgroundFrame);ancestors.forEach(el=>el.removeEventListener('transitionend',refreshBackground));cancelAnimationFrame(resizeFrame);reset();global.removeEventListener('blur',blur);global.removeEventListener('resize',onViewportResize);mobile.removeEventListener('change',onMobileChange);compact.removeEventListener('change',onMobileChange);svg.remove();if(host.style.position==='relative')host.style.position=oldPosition;instances.delete(host)}};
