@@ -80,7 +80,7 @@
     found.push(...node.querySelectorAll(chars + ',' + words));
     found.forEach(el => {
       const word = el.matches(words);
-      const root = word ? el : el.closest('h1,h2,h3,h4,h5,h6,.tab-heading') || el.parentElement;
+      const root = word ? el : el.closest('h1,h2,h3,h4,h5,h6,.tab-heading,.heading-style-h1,.heading-style-h2-alt') || el.parentElement;
       if (root) bind(root, word);
     });
   }
