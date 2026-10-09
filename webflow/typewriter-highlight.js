@@ -1,9 +1,8 @@
-/* Shared phrase scramble for existing Webflow typewriters; native scripts keep their timing. */
+/* Phrase scramble only for product tabs and shared Enterprise customer transitions. */
 (function () {
   'use strict';
   if (window.FalTypewriterHighlight || document.documentElement.classList.contains('wf-design-mode')) return;
-  const chars = '.tw-letter,.tab-click-type-char,.customer-type-char,.case-type-char,[data-typewriter-char]';
-  const words = '.hero-typewriter-word,.home-worlds-label,[data-typewriter-word]';
+  const chars = '.tab-pane-content-1 .tab-click-type-char,.tab-pane-content-2 .tab-click-type-char,.tab-pane-content-3 .tab-click-type-char,.customers-tab .customer-type-char';
   const motion = matchMedia('(prefers-reduced-motion: reduce)');
   const groups = new WeakMap(), live = new Set();
   const metrics = document.createElement('canvas').getContext('2d');
@@ -75,23 +74,13 @@
     });
     state.timer = setTimeout(() => clear(state), 140);
   }
-  function bind(root, word) {
+  function bind(root) {
     if (groups.has(root)) return;
-    const state = { root, word, nodes:new Set(), letters:[], timer:0, settling:false, started:false, done:false, resolved:0 };
+    const state = { root, nodes:new Set(), letters:[], timer:0, settling:false, started:false, done:false, resolved:0 };
     groups.set(root, state);
     live.add(state);
-    function update(records) {
+    function update() {
       if (!root.isConnected || motion.matches || document.hidden) { clear(state); return; }
-      if (word) {
-        if (!records || !records.some(r => r.type === 'childList' || r.type === 'characterData')) return;
-        clearTimeout(state.timer);
-        if (!root.textContent) { clear(state); return; }
-        state.settling = false;
-        ink(state, root, shuffle(root.textContent));
-        root.classList.remove('fal-tw-clear');
-        state.timer = setTimeout(() => settle(state), 100);
-        return;
-      }
       const letters = [...root.querySelectorAll(chars)];
       if (!letters.length) { clear(state); state.letters = []; return; }
       if (letters.length !== state.letters.length || letters.some((node, i) => node !== state.letters[i])) {
@@ -117,18 +106,17 @@
       if (revealed === letters.length) { state.done = true; settle(state); }
     }
     state.observer = new MutationObserver(update);
-    state.observer.observe(root, { childList:true, subtree:true, characterData:word, attributes:!word, attributeFilter:word ? undefined : ['style'] });
+    state.observer.observe(root, { childList:true, subtree:true, attributes:true, attributeFilter:['style'] });
     update();
   }
   function discover(node) {
     if (node.nodeType !== 1) return;
     const found = [];
-    if (node.matches(chars + ',' + words)) found.push(node);
-    found.push(...node.querySelectorAll(chars + ',' + words));
+    if (node.matches(chars)) found.push(node);
+    found.push(...node.querySelectorAll(chars));
     found.forEach(el => {
-      const word = el.matches(words);
-      const root = word ? el : el.closest('h1,h2,h3,h4,h5,h6,.tab-heading,.heading-style-h1,.heading-style-h2-alt') || el.parentElement;
-      if (root) bind(root, word);
+      const root = el.closest('.tab-heading');
+      if (root) bind(root);
     });
   }
   const discovery = new MutationObserver(records => {
