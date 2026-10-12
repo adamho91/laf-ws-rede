@@ -2,7 +2,7 @@
  * No dependencies. Auto-mounts #angle-mark and [data-angle-marks] after DOM ready.
  * Optional attributes: data-angle-scale="2", data-angle-count="8".
  * Desktop (>=1440px) lines use 92% length with unchanged 80px strokes.
- * Tablets/small laptops (768–1439px): 60px strokes, 20% shorter lines; phones (<=767px): half-length lines, 50px strokes, and a tighter angle spread. Header silhouettes are chosen without repeats.
+ * Tablets/small laptops (768–1439px): 60px strokes, 20% shorter lines; phones (<=767px): ~90px lines, 40px strokes, and a tighter angle spread. Header silhouettes are chosen without repeats.
  */
 (function(global){
 'use strict';
@@ -124,8 +124,8 @@ function normalize(input){
  return o;
 }
 function layout(W,H,input={}){
- const o=normalize(input),scale=o.scale*(o.mobile?o.mobileScale:o.compact?.8:.92);
- const strokeScale=o.scale*(o.mobile?o.mobileScale+o.mobileStrokeAdd/o.width:o.compact?.75:1);
+ const o=normalize(input),scale=o.scale*(o.mobile?o.mobileScale*2/3:o.compact?.8:.92);
+ const strokeScale=o.scale*(o.mobile?(o.mobileScale+o.mobileStrokeAdd/o.width)*.8:o.compact?.75:1);
  const diameter=2*(o.length*scale+o.width*strokeScale/2)+48;
  const cols=Math.min(o.count,Math.max(1,Math.floor(W/diameter))),rows=Math.ceil(o.count/cols);
  return {width:Math.max(W,cols*diameter),height:Math.max(H,rows*diameter),cols,rows,scale,strokeScale};
@@ -187,26 +187,21 @@ function markup(W,H,input){
  }
  return result;
 }
-// A shared fitting envelope preserves equal primitive lengths across silhouettes.
-// Convert the stroke to viewBox units instead of relying on SVG vector-effect,
-// which can differ when WebKit also transforms the animated stroke groups.
+// Mobile hosts position the artwork only. Geometry comes from layout(), never
+// from a page-specific slot size or a silhouette's bounding box.
 function fitMobile(svg,w,h){
  const strokes=[...svg.querySelectorAll('line')];
- let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity,length=0;
+ if(!strokes.length||!w||!h)return;
+ let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
  for(const line of strokes){
   const x1=+line.getAttribute('x1'),y1=+line.getAttribute('y1'),x2=+line.getAttribute('x2'),y2=+line.getAttribute('y2');
   minX=Math.min(minX,x1,x2);maxX=Math.max(maxX,x1,x2);
   minY=Math.min(minY,y1,y2);maxY=Math.max(maxY,y1,y2);
-  length=Math.max(length,Math.hypot(x2-x1,y2-y1));
  }
- const stroke=40,inset=12;
- const scale=Math.min(.8,(w-stroke-inset*2)/(length*1.3),(h-stroke-inset*2)/(length*1.3));
- if(!Number.isFinite(scale)||scale<=0||!length)return;
- const width=w/scale,height=h/scale;
- svg.setAttribute('viewBox',[(minX+maxX-width)/2,(minY+maxY-height)/2,width,height].join(' '));
+ svg.setAttribute('viewBox',[(minX+maxX-w)/2,(minY+maxY-h)/2,w,h].join(' '));
  svg.style.width=w+'px';svg.style.height=h+'px';svg.style.left='0px';svg.style.top='0px';
- strokes.forEach(line=>line.setAttribute('stroke-width',String(stroke/scale)));
- svg.querySelectorAll('[data-am-joint-cap]').forEach(cap=>cap.setAttribute('r',String((stroke/2+.5)/scale)));
+ const stroke=+strokes[0].getAttribute('stroke-width');
+ svg.querySelectorAll('[data-am-joint-cap]').forEach(cap=>cap.setAttribute('r',String(stroke/2+.5)));
  svg.setAttribute('data-am-mobile-fit','true');
 }
 function mount(target,input={}){
